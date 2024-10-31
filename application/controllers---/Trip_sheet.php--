@@ -1,0 +1,806 @@
+<?php
+defined('BASEPATH') or exit('No direct script access allowed');
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+
+class Trip_sheet extends CI_Controller
+{
+
+
+    public $data = array();
+
+    function __construct()
+    {
+        parent::__construct();
+        admin_session_check();
+        $this->data['page_id'] = "trip_sheet";
+        $this->data['page_title'] = "trip_sheet";
+        $this->load->library('pagination');
+        date_default_timezone_set('Asia/Kolkata');
+        $this->load->helper('string');
+        $this->load->helper('text');
+    }
+
+    public function index()
+    { 
+        $this->data['page_id'] = "trip_sheet";
+        $this->data['page_title'] = "All trip sheet Lists  | CargoAdmin";
+        $config = array();
+        $searchqry = array();
+        $data_cndtn = array();
+        if (isset($_GET['status']) && $_GET['status'] != null && $_GET['status'] != 'all') {
+            $data_cndtn['status'] = $_GET['status'];
+        }
+        if (isset($_GET['vehicle_number']) && $_GET['vehicle_number'] != null && $_GET['vehicle_number'] != 'all') {
+            $data_cndtn['vehicle_id'] = $_GET['vehicle_number'];
+        }
+        $config["base_url"] = base_url() . "trip_sheet/index";
+        $total_row = $this->admin_model->count_all_data_condition_ordersearch('trip_sheet', $data_cndtn, 'id', 'DESC', $searchqry);
+        $config["total_rows"] = $total_row;
+        $config["per_page"] = 15;
+        $config['use_page_numbers'] = TRUE;
+        $config["suffix"] = '?' . http_build_query($_GET, '', "&");
+        $config['num_links'] = $total_row;
+        $config['cur_tag_open'] = '&nbsp;<a style="color: #fff;cursor: default;background-color: #337ab7;border-color: #337ab7;border-radius: 3px;">';
+        $config['cur_tag_close'] = '</a>';
+        $config['next_link'] = '<i class="fa fa-arrow-circle-right" aria-hidden="true"></i>';
+        $config['prev_link'] = '<i class="fa fa-arrow-circle-left" aria-hidden="true"></i>';
+        $this->pagination->initialize($config);
+
+        if ($this->uri->segment(3)) {
+            $page = ($this->uri->segment(3));
+        } else {
+            $page = 1;
+        }
+        $this->data["result"] = $this->admin_model->get_all_data_condition_ordersearch('trip_sheet', $data_cndtn, $config["per_page"], $page, 'id', 'DESC', $searchqry);
+         //$data["result2"] = $this->admin_model->get_all_data_condition_ordersearch2();var_dump($data['result2']);die();
+        $str_links = $this->pagination->create_links();
+        $this->data["links"] = explode('&nbsp', $str_links);
+        $data_cndtnx = array('status' => 0);
+        $this->data['vehicles'] = $this->admin_model->get_all_data('vehicles', $data_cndtnx, 'id', 'DESC');
+        $this->load->view('head/header', $this->data);
+        $this->load->view('trip_sheet/index');
+        $this->load->view('head/footer');
+    }
+
+    public function create()
+    {
+        $this->data['page_id'] = "trip_sheet_create";
+        $this->data['page_title'] = "Add new Store  | CargoAdmin";
+        $data_cndtnx = array('status' => 0);
+        $this->data['vehicles'] = $this->admin_model->get_all_data('vehicles', $data_cndtnx, 'id', 'DESC');
+        $this->load->view('head/header', $this->data);
+        $this->load->view('trip_sheet/create');
+        $this->load->view('head/footer');
+    }
+
+    public function serach_vehicle_id($id)
+    {
+        $condtn = array('id' => $id, 'status' => 0);
+        $result = $this->crud_model->table_details_dt('vehicles', $condtn);
+        echo json_encode($result);
+    }
+
+    public function create_process()
+    {
+//        echo('sss');
+//        return ;
+        $config['upload_path'] = './assets/uploads/headers';
+        $config['allowed_types'] = 'gif|jpg|png';
+
+        $this->load->library('upload', $config);
+        if (!$this->upload->do_upload('header')) {
+            if ($this->upload->data()['file_name']){
+                $error = array('error' => strip_tags($this->upload->display_errors()));
+                $this->data['page_id']="goods_details_create";
+                $this->data['page_title']="Add Trip Sheet  | Cargoadmin";
+                $this->load->view('head/header',$this->data);
+                $this->load->view('trip_sheet/create', $error);
+                $this->load->view('head/footer');
+                return;
+            }
+        }else{
+            $file_name = $this->upload->data()['file_name'];
+        }
+
+        if ($this->security->xss_clean($this->input->post('stop_km')) != null) {
+            $stop_km = $this->security->xss_clean($this->input->post('stop_km'));
+        } else {
+            $stop_km = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('start_km')) != null) {
+            $start_km = $this->security->xss_clean($this->input->post('start_km'));
+        } else {
+            $start_km = 0;
+        }
+
+        if ($stop_km == 0) {
+            $total_km = 0;
+        } else {
+            $total_km = $stop_km - $start_km;
+        }
+
+        if ($this->security->xss_clean($this->input->post('total_rent')) != null) {
+            $total_rent = $this->security->xss_clean($this->input->post('total_rent'));
+        } else {
+            $total_rent = 0;
+        }
+
+        //exptotal
+        if ($this->security->xss_clean($this->input->post('exp_diesel')) != null) {
+            $exp_diesel = $this->security->xss_clean($this->input->post('exp_diesel'));
+        } else {
+            $exp_diesel = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('exp_batha')) != null) {
+            $exp_batha = $this->security->xss_clean($this->input->post('exp_batha'));
+        } else {
+            $exp_batha = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('exp_phone')) != null) {
+            $exp_phone = $this->security->xss_clean($this->input->post('exp_phone'));
+        } else {
+            $exp_phone = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('exp_toll')) != null) {
+            $exp_toll = $this->security->xss_clean($this->input->post('exp_toll'));
+        } else {
+            $exp_toll = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('exp_food')) != null) {
+            $exp_food = $this->security->xss_clean($this->input->post('exp_food'));
+        } else {
+            $exp_food = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('exp_other')) != null) {
+            $exp_other = $this->security->xss_clean($this->input->post('exp_other'));
+        } else {
+            $exp_other = 0;
+        }
+
+        $exp_total = $exp_diesel + $exp_batha + $exp_phone + $exp_toll + $exp_food + $exp_other;
+        if ($this->security->xss_clean($this->input->post('exp_advance')) != null) {
+            $exp_advance = $this->security->xss_clean($this->input->post('exp_advance'));
+        } else {
+            $exp_advance = 0;
+        }
+
+        $balance_amount = $exp_total - $exp_advance;
+
+        $vehicles_cndtnx = array('status' => 0, 'id' => $this->security->xss_clean($this->input->post('vehicle_number')));
+        $vehicles_details = $this->admin_model->get_all_data('vehicles', $vehicles_cndtnx, 'id', 'DESC');
+        
+        if ($vehicles_details == false) {
+            $this->session->set_flashdata('msgx', "<div class='alert alert-danger'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Vehicle Number Doesnot exist..!</div>");
+            redirect(base_url() . 'trip_sheet/create');
+        } else {
+            $vehicle_numberx = $vehicles_details[0]->vehicle_number;
+        }
+
+        $datax = array(
+            'trip_date' => $this->security->xss_clean($this->input->post('trip_date')),
+            'trip_time' => $this->security->xss_clean($this->input->post('trip_time')),
+            'header'=>$file_name,
+            'vehicle_id' => $this->security->xss_clean($this->input->post('vehicle_number')),
+            'vehicle_number' => $vehicle_numberx,
+            'vehicle_drivername' => $this->security->xss_clean($this->input->post('vehicle_drivername')),
+            'vehicle_drivermobilenumber' => $this->security->xss_clean($this->input->post('vehicle_drivermob')),
+            'helper_name' => $this->security->xss_clean($this->input->post('helper_name')),
+            'helper_mobilenumber' => $this->security->xss_clean($this->input->post('helper_mobilenumber')),
+            'start_km' => $start_km,
+            'stop_km' => $stop_km,
+            'total_km' => $total_km,
+            'total_rent' => $total_rent,
+            'exp_diesel' => $exp_diesel,
+            'exp_batha' => $exp_batha,
+            'exp_phone' => $exp_phone,
+            'exp_toll' => $exp_toll,
+            'exp_food' => $exp_food,
+            'exp_other' => $exp_other,
+            'exp_total' => $exp_total,
+            'exp_advance' => $exp_advance,
+            'balance_amt' => $balance_amount,
+            'created_at' => date('Y-m-d H:i:s'),
+            'status' => $this->security->xss_clean($this->input->post('status'))
+        );
+        if($this->input->post('status')=="1"){
+            $st=5;
+        }
+        else if($this->input->post('status')=="0"){
+            $st=6;
+        }
+        else if($this->input->post('status')=="2"){
+            $st=7;
+        }
+        else{
+            $st=8;
+        }
+        
+        $lstid = $this->crud_model->create_table_account('trip_sheet', $datax);
+        $this->session->set_flashdata('msgx', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> created successfully.</div>");
+
+        // file upload starts here
+
+        ini_set('max_execution_time', '300');
+
+		$file_mimes = array(
+            'text/csv',
+            'text/plain',
+            'text/x-csv',
+            'application/csv',
+            'application/x-csv',
+            'application/excel',
+            'application/vnd.msexcel',
+            'application/vnd.ms-excel',
+            'application/octet-stream', 
+            'text/comma-separated-values',
+            'text/x-comma-separated-values',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+
+		// if(isset($_FILES['upload_file']['name']) && in_array($_FILES['upload_file']['type'], $file_mimes)) {
+
+		// 	$arr_file = explode('.', $_FILES['upload_file']['name']);
+		// 	$extension = end($arr_file);
+
+		// 	if('csv' == $extension){
+		// 		$reader = new \PhpOffice\PhpSpreadsheet\Reader\Csv();
+		// 	} else {
+		// 		$reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+		// 	}
+
+		// 	$spreadsheet = $reader->load($_FILES['upload_file']['tmp_name']);
+		// 	$sheetData = $spreadsheet->getActiveSheet()->toArray();
+
+			 
+
+		// 	foreach ($sheetData as $val){
+
+        //         //preg_match('/[0-9]{10}/',  $val['11'], $phone);
+
+		// 		$datax=array(
+		// 			'company' =>       $val['0'] ?? "",
+        //             'shipmentname' =>  $val['1'] ?? "",
+        //             'origin' =>        $val['2'] ?? "",
+        //             'boxno' =>         $val['3'] ?? "",
+        //             'invoiceno' =>     $val['4'] ?? "",
+        //             'pcs' =>           $val['5'] ?? "",
+		// 			'weight' =>        $val['6'] ?? "",
+		// 			'rewight' =>       $val['7'] ?? "",
+		// 			'received_pcs' =>  $val['8'] ?? "",
+        //             'sender_address' =>$val['9'] ?? "",
+        //             'reciever_address'=>$val['10'] ?? "",
+        //             'phone' =>         $val['11'] ?? "",
+        //             'state' =>         $val['12'] ?? "",
+        //             'district' =>      $val['13'] ?? "",
+        //             'pincode' =>       $val['14'] ?? "",
+        //             'goods_desc' =>    $val['15'] ?? "",
+		// 			'recieved_at_hub'=>$val['16'] ?? "",
+		// 			'connecting_date'=>$val['17'] ?? "",
+        //             'recieved_at_branch'=>$val['18'] ?? "",
+        //             'vendor'=>         $val['19'] ?? "",
+        //             'docket'=>         $val['20'] ?? "",
+        //             'contact_no'=>     $val['21'] ?? "",
+        //             'status' =>        $val['22'] ?? "",
+        //             'remarks' =>       $val['23'] ?? "",
+        //             'sendingdate' =>   $val['17'] ?? "",
+        //             'recievingdate' =>   $val['16'] ?? "",
+		// 			'created_at' =>    date('Y-m-d H:i:s'),
+					
+		// 		);
+		// 		$lstid = $this->crud_model->create_table_account('goods_details', $datax);
+		// 	}
+		
+		// 	$this->session->set_flashdata('msgx',"<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> imported successfully.</div>");
+		
+		// }
+
+        redirect(base_url() . 'trip_sheet/create');
+
+	}
+
+
+    public function update()
+    {
+        if ($this->uri->segment(3) == null) {
+            $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Data not found..!</div>");
+            redirect(base_url() . 'trip_sheet');
+        } else {
+            $this->data['page_id'] = "trip_sheet";
+            $this->data['page_title'] = "Update Store  | CargoAdmin";
+            $data_cndtnx = array('status' => 0);
+            $this->data['vehicles'] = $this->admin_model->get_all_data('vehicles', $data_cndtnx, 'id', 'DESC');
+            $data_cndtnx = array('id' => $this->uri->segment(3));
+            $details = $this->admin_model->get_all_data('trip_sheet', $data_cndtnx, 'id', 'DESC');
+            if ($details == false) {
+                $this->session->set_flashdata('ermsg', "<div class='alert alert-danger'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Data not found..!</div>");
+                redirect(base_url() . 'trip_sheet');
+            } else {
+                $this->data["id"] = $details[0]->id;
+                $this->data["trip_date"] = $details[0]->trip_date;
+                $this->data["trip_time"] = $details[0]->trip_time;
+                $this->data["vehicle_id"] = $details[0]->vehicle_id;
+                $this->data["vehicle_number"] = $details[0]->vehicle_number;
+                $this->data["vehicle_drivername"] = $details[0]->vehicle_drivername;
+                $this->data["vehicle_drivermobilenumber"] = $details[0]->vehicle_drivermobilenumber;
+                $this->data["helper_name"] = $details[0]->helper_name;
+                $this->data["helper_mobilenumber"] = $details[0]->helper_mobilenumber;
+                $this->data["start_km"] = $details[0]->start_km;
+                $this->data["stop_km"] = $details[0]->stop_km;
+                $this->data["total_km"] = $details[0]->total_km;
+                $this->data["total_rent"] = $details[0]->total_rent;
+                $this->data["exp_diesel"] = $details[0]->exp_diesel;
+                $this->data["exp_batha"] = $details[0]->exp_batha;
+                $this->data["exp_phone"] = $details[0]->exp_phone;
+                $this->data["exp_toll"] = $details[0]->exp_toll;
+                $this->data["exp_food"] = $details[0]->exp_food;
+                $this->data["exp_other"] = $details[0]->exp_other;
+                $this->data["exp_total"] = $details[0]->exp_total;
+                $this->data["exp_advance"] = $details[0]->exp_advance;
+                $this->data["balance_amt"] = $details[0]->balance_amt;
+
+                $this->data["status"] = $details[0]->status;
+                $this->load->view('head/header', $this->data);
+                $this->load->view('trip_sheet/update');
+                $this->load->view('head/footer');
+            }
+        }
+    }
+
+    public function update_process()
+    {
+        $uiid = $this->input->post('uid');
+
+        if ($this->security->xss_clean($this->input->post('stop_km')) != null) {
+            $stop_km = $this->security->xss_clean($this->input->post('stop_km'));
+        } else {
+            $stop_km = 0;
+        }
+
+        if ($this->security->xss_clean($this->input->post('start_km')) != null) {
+            $start_km = $this->security->xss_clean($this->input->post('start_km'));
+        } else {
+            $start_km = 0;
+        }
+        if ($stop_km == 0) {
+            $total_km = 0;
+        } else {
+            $total_km = $stop_km - $start_km;
+        }
+        if ($this->security->xss_clean($this->input->post('total_rent')) != null) {
+            $total_rent = $this->security->xss_clean($this->input->post('total_rent'));
+        } else {
+            $total_rent = 0;
+        }
+
+        //exptotal
+        if ($this->security->xss_clean($this->input->post('exp_diesel')) != null) {
+            $exp_diesel = $this->security->xss_clean($this->input->post('exp_diesel'));
+        } else {
+            $exp_diesel = 0;
+        }
+        if ($this->security->xss_clean($this->input->post('exp_batha')) != null) {
+            $exp_batha = $this->security->xss_clean($this->input->post('exp_batha'));
+        } else {
+            $exp_batha = 0;
+        }
+        if ($this->security->xss_clean($this->input->post('exp_phone')) != null) {
+            $exp_phone = $this->security->xss_clean($this->input->post('exp_phone'));
+        } else {
+            $exp_phone = 0;
+        }
+        if ($this->security->xss_clean($this->input->post('exp_toll')) != null) {
+            $exp_toll = $this->security->xss_clean($this->input->post('exp_toll'));
+        } else {
+            $exp_toll = 0;
+        }
+        if ($this->security->xss_clean($this->input->post('exp_food')) != null) {
+            $exp_food = $this->security->xss_clean($this->input->post('exp_food'));
+        } else {
+            $exp_food = 0;
+        }
+        if ($this->security->xss_clean($this->input->post('exp_other')) != null) {
+            $exp_other = $this->security->xss_clean($this->input->post('exp_other'));
+        } else {
+            $exp_other = 0;
+        }
+        $exp_total = $exp_diesel + $exp_batha + $exp_phone + $exp_toll + $exp_food + $exp_other;
+        if ($this->security->xss_clean($this->input->post('exp_advance')) != null) {
+            $exp_advance = $this->security->xss_clean($this->input->post('exp_advance'));
+        } else {
+            $exp_advance = 0;
+        }
+
+        $file_mimes = ['text/csv'];
+
+        if(isset($_FILES['upload_file']['name']) && in_array($_FILES['upload_file']['type'], $file_mimes)) {
+
+			$arr_file = explode('.', $_FILES['upload_file']['name']);
+			$extension = end($arr_file);
+
+			if('csv' == $extension){
+				$reader = new \PhpOffice\PhpSpreadsheet\Reader\Csv();
+			} else {
+				$reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+			}
+
+			$spreadsheet = $reader->load($_FILES['upload_file']['tmp_name']);
+			$sheetData = $spreadsheet->getActiveSheet()->toArray();
+
+			// print_r($sheetData);
+
+			foreach ($sheetData as $val){
+
+                preg_match('/[0-9]{10}/',  $val['6'], $phone);
+
+				$datax=array(
+					'company' =>       $val['0'],
+                    'invoiceno' =>     $val['1'],
+                    'pcs' =>           $val['2'],
+					'weight' =>        $val['3'],
+                    'district' =>      $val['4'],
+					'date' =>          $val['5'],
+                    'address' =>       $val['6'],
+					'shipmentname' =>  $val['7'],
+					'sendingdate' =>   $val['8'],
+					'recievingdate' => $val['9'],
+					'phone' =>         $phone[0],
+					'created_at' =>    date('Y-m-d H:i:s'),
+					'status' =>        0
+				);
+				$lstid = $this->crud_model->create_table_account('goods_details', $datax);
+			}
+		
+			$this->session->set_flashdata('msgx',"<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> imported successfully.</div>");
+		
+		}
+        
+        $balance_amount = $exp_total - $exp_advance;
+        $vehicles_cndtnx = array('status' => 0, 'id' => $this->security->xss_clean($this->input->post('vehicle_number')));
+        $vehicles_details = $this->admin_model->get_all_data('vehicles', $vehicles_cndtnx, 'id', 'DESC');
+        if ($vehicles_details == false) {
+            $this->session->set_flashdata('msgx', "<div class='alert alert-danger'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Vehicle Number Doesnot exist..!</div>");
+            redirect(base_url() . 'trip_sheet/update/' . $uiid);
+        } else {
+            $vehicle_numberx = $vehicles_details[0]->vehicle_number;
+        }
+        $datax = array(
+            'trip_date' => $this->security->xss_clean($this->input->post('trip_date')),
+            'trip_time' => $this->security->xss_clean($this->input->post('trip_time')),
+            'vehicle_id' => $this->security->xss_clean($this->input->post('vehicle_number')),
+            'vehicle_number' => $vehicle_numberx,
+            'vehicle_drivername' => $this->security->xss_clean($this->input->post('vehicle_drivername')),
+            'vehicle_drivermobilenumber' => $this->security->xss_clean($this->input->post('vehicle_drivermob')),
+            'helper_name' => $this->security->xss_clean($this->input->post('helper_name')),
+            'helper_mobilenumber' => $this->security->xss_clean($this->input->post('helper_mobilenumber')),
+            'start_km' => $start_km,
+            'stop_km' => $stop_km,
+            'total_km' => $total_km,
+            'total_rent' => $total_rent,
+            'exp_diesel' => $exp_diesel,
+            'exp_batha' => $exp_batha,
+            'exp_phone' => $exp_phone,
+            'exp_toll' => $exp_toll,
+            'exp_food' => $exp_food,
+            'exp_other' => $exp_other,
+            'exp_total' => $exp_total,
+            'exp_advance' => $exp_advance,
+            'balance_amt' => $balance_amount,
+            'created_at' => date('Y-m-d H:i:s'),
+            'status' => $this->security->xss_clean($this->input->post('status'))
+        );
+        $lstid = $this->crud_model->edit_table_account('trip_sheet', $datax, $uiid, 'id');
+        $this->crud_model->edit_table_account('trip_sheet_cargos', ['status' => $this->input->post('status')], $uiid, 'trip_sheet_id');
+        $this->session->set_flashdata('msgx', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> Updated successfully.</div>");
+        redirect(base_url() . 'trip_sheet/update/' . $uiid);
+    }
+
+    public function delete_process()
+    {
+        if ($this->uri->segment(3) == null) {
+            $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Data not found..!</div>");
+            redirect(base_url() . 'trip_sheet');
+        } else {
+            $dat = $this->admin_model->delete_table_account('trip_sheet', $this->uri->segment(3), 'id');
+            $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Deleted successfully..!.</div>");
+            redirect(base_url() . 'trip_sheet');
+        }
+    }
+
+    public function print()
+    {
+        if ($this->uri->segment(3) == null) {
+            $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Data not found..!</div>");
+            redirect(base_url() . 'trip_sheet');
+        } else {
+            $this->data['page_id'] = "trip_sheet";
+            $this->data['page_title'] = "Print Trip Sheet";
+            $data_cndtnx = array('status' => 0);
+            $this->data['vehicles'] = $this->admin_model->get_all_data('vehicles', $data_cndtnx, 'id', 'DESC');
+            $data_cndtnx = array('id' => $this->uri->segment(3));
+            $details = $this->admin_model->get_all_data('trip_sheet', $data_cndtnx, 'id', 'DESC');
+            if ($details == false) {
+                $this->session->set_flashdata('ermsg', "<div class='alert alert-danger'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Data not found..!</div>");
+                redirect(base_url() . 'trip_sheet');
+            } else {
+                $data_cndtnx = array('trip_sheet_id' => $this->uri->segment(3));
+                $this->data['trip_sheet_cargos'] = $this->admin_model->get_all_data('trip_sheet_cargos', $data_cndtnx, 'id', 'ASC');
+                $this->data["id"] = $details[0]->id;
+                $this->data["trip_date"] = $details[0]->trip_date;
+                $this->data["trip_time"] = $details[0]->trip_time;
+                $this->data["header"] = $details[0]->header;
+                $this->data["vehicle_id"] = $details[0]->vehicle_id;
+                $this->data["vehicle_number"] = $details[0]->vehicle_number;
+                $this->data["vehicle_drivername"] = $details[0]->vehicle_drivername;
+                $this->data["vehicle_drivermobilenumber"] = $details[0]->vehicle_drivermobilenumber;
+                $this->data["helper_name"] = $details[0]->helper_name;
+                $this->data["helper_mobilenumber"] = $details[0]->helper_mobilenumber;
+                $this->data["start_km"] = $details[0]->start_km;
+                $this->data["stop_km"] = $details[0]->stop_km;
+                $this->data["total_km"] = $details[0]->total_km;
+                $this->data["total_rent"] = $details[0]->total_rent;
+                $this->data["exp_diesel"] = $details[0]->exp_diesel;
+                $this->data["exp_batha"] = $details[0]->exp_batha;
+                $this->data["exp_phone"] = $details[0]->exp_phone;
+                $this->data["exp_toll"] = $details[0]->exp_toll;
+                $this->data["exp_food"] = $details[0]->exp_food;
+                $this->data["exp_other"] = $details[0]->exp_other;
+                $this->data["exp_total"] = $details[0]->exp_total;
+                $this->data["exp_advance"] = $details[0]->exp_advance;
+                $this->data["balance_amt"] = $details[0]->balance_amt;
+
+                $this->data["status"] = $details[0]->status;
+                $this->load->view('head/header', $this->data);
+                $this->load->view('trip_sheet/print');
+                $this->load->view('head/footer');
+            }
+        }
+    }
+
+    public function cargos()
+    {
+        $data['details'] = $this->admin_model->list_invoice_numbers();
+        $this->data['page_id'] = "trip_sheet";
+        $this->data['page_title'] = "All trip sheet cargo lists  | CargoAdmin";
+        $config = array();
+        $searchqry = array();
+        $data_cndtn = array('trip_sheet_id' => $this->uri->segment(3));
+        // if(isset($_GET['status']) && $_GET['status']!=null && $_GET['status']!='all'){
+        // 	$data_cndtn['status']=$_GET['status'];
+        // }
+        // if(isset($_GET['vehicle_number']) && $_GET['vehicle_number']!=null && $_GET['vehicle_number']!='all'){
+        // 	$data_cndtn['vehicle_id']=$_GET['vehicle_number'];
+        // }
+        $config["base_url"] = base_url() . "trip_sheet/index";
+        $total_row = $this->admin_model->count_all_data_condition_ordersearch('trip_sheet_cargos', $data_cndtn, 'id', 'DESC', $searchqry);
+        $config["total_rows"] = $total_row;
+        $config["per_page"] = 100;
+        $config['use_page_numbers'] = TRUE;
+        $config["suffix"] = '?' . http_build_query($_GET, '', "&");
+        $config['num_links'] = $total_row;
+        $config['cur_tag_open'] = '&nbsp;<a style="color: #fff;cursor: default;background-color: #337ab7;border-color: #337ab7;border-radius: 3px;">';
+        $config['cur_tag_close'] = '</a>';
+        $config['next_link'] = '<i class="fa fa-arrow-circle-right" aria-hidden="true"></i>';
+        $config['prev_link'] = '<i class="fa fa-arrow-circle-left" aria-hidden="true"></i>';
+        $this->pagination->initialize($config);
+        $page = 1;
+        $this->data["result"] = $this->admin_model->get_all_data_condition_ordersearch('trip_sheet_cargos', $data_cndtn, $config["per_page"], $page, 'created_at', 'ASC', $searchqry);
+        $str_links = $this->pagination->create_links();
+        $this->data["links"] = explode('&nbsp', $str_links);
+        $data_cndtnx = array('status' => 0);
+        $this->data['cargos'] = $this->admin_model->get_all_data('cargo', $data_cndtnx, 'created_at','ASC');
+        
+        if ($this->uri->segment(4)) {
+            $data_cndtnxx = array('id' => $this->uri->segment(4));
+            $trip_sheet_cargosdtls = $this->admin_model->get_all_data('trip_sheet_cargos', $data_cndtnxx, 'id', 'DESC');
+            if ($trip_sheet_cargosdtls == false) {
+                $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>data not found..!.</div>");
+                redirect(base_url() . 'trip_sheet/cargos/' . $this->uri->segment(3));
+            } else {
+                $this->data['trip_sheet_cargosdtls'] = $trip_sheet_cargosdtls;
+            }
+        }
+        $this->load->view('head/header', $this->data);
+        $this->load->view('trip_sheet/trip_sheet_cargos/index',$data);
+        $this->load->view('head/footer');
+    }
+
+    public function cargo_create_process()
+    { 
+
+        
+        $uid = $this->security->xss_clean($this->input->post('trip_sheet_id'));
+        
+       
+       // $cargos_cndtnx = array('status' => 0, 'id' => $this->security->xss_clean($this->input->post('cargo_name')));
+       $cargos_cndtnx = array('status' => 0);
+        $cargos_details = $this->admin_model->get_all_data('cargo', $cargos_cndtnx, 'id', 'DESC');
+        
+        // if ($cargos_details == false) {
+        //     $this->session->set_flashdata('msgx', "<div class='alert alert-danger'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Cargo name not exist..!</div>");
+        //     redirect(base_url() . 'trip_sheet/cargos/' . $uid);
+        // } else {
+        //     $cargo_namex = $cargos_details[0]->cargo_name;
+        // }
+       
+        $datax = array(
+            'invoice_number' => $this->security->xss_clean($this->input->post('invhid')),
+            'trip_sheet_id' => $uid,
+            'cargo_id' => $this->security->xss_clean($this->input->post('cargo_id')),
+            'mobilenumber' => $this->security->xss_clean($this->input->post('mobilenumber')),
+            'cargo_name' => $this->security->xss_clean($this->input->post('cargo_name')),
+            'place' => $this->security->xss_clean($this->input->post('place')),
+            'quantity' => $this->security->xss_clean($this->input->post('quantity')),
+            'weight' => $this->security->xss_clean($this->input->post('weight')),
+            'created_at' => date('Y-m-d H:i:s'),
+            'status' => $this->security->xss_clean($this->input->post('status'))
+        );
+        $lstid = $this->crud_model->create_table_account('trip_sheet_cargos', $datax);
+
+        $status = ['On the way', 'Out for Delivery', 'In Transit', 'Delivered','Pending','Not Delivered'];
+        $change_goods_details = array(
+            'goods_status' => $status[$this->security->xss_clean($this->input->post('status'))]
+        );
+        $invoicenumber = $this->security->xss_clean($this->input->post('invhid'));
+        $this->crud_model->edit_table_account('goods_details', $change_goods_details, $invoicenumber, 'invoiceno');
+       
+        $this->session->set_flashdata('msgx', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> Cargo added successfully.</div>");
+        redirect(base_url() . 'trip_sheet/cargos/' . $uid);
+
+    }
+
+    public function cargo_update_process()
+    {
+        $uid = $this->security->xss_clean($this->input->post('trip_sheet_id'));
+        $uidcargo = $this->security->xss_clean($this->input->post('trip_sheet_cargo_id'));
+        $cargos_cndtnx = array('status' => 0, 'id' => $this->security->xss_clean($this->input->post('cargo_name')));
+        $cargos_details = $this->admin_model->get_all_data('cargo', $cargos_cndtnx, 'id', 'DESC');
+        if ($cargos_details == false) {
+            $this->session->set_flashdata('msgx', "<div class='alert alert-danger'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Cargo name not exist..!</div>");
+            redirect(base_url() . 'trip_sheet/cargos/' . $uid . '/' . $uidcargo);
+        } else {
+            $cargo_namex = $cargos_details[0]->cargo_name;
+        }
+        $datax = array(
+            'invoice_number' => $this->security->xss_clean($this->input->post('invoice_number')),
+            'trip_sheet_id' => $uid,
+            'cargo_id' => $this->security->xss_clean($this->input->post('cargo_id')),
+            'cargo_name' => $this->security->xss_clean($this->input->post('cargo_name')),
+            'mobilenumber' => $this->security->xss_clean($this->input->post('mobilenumber')),
+            'place' => $this->security->xss_clean($this->input->post('place')),
+            'quantity' => $this->security->xss_clean($this->input->post('quantity')),
+            'weight' => $this->security->xss_clean($this->input->post('weight')),
+            'updated_at' => date('Y-m-d H:i:s')
+        );
+        $lstid = $this->crud_model->edit_table_account('trip_sheet_cargos', $datax, $uidcargo, 'id');
+        $this->session->set_flashdata('msgx', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> Updated successfully.</div>");
+        redirect(base_url() . 'trip_sheet/cargos/' . $uid . '/' . $uidcargo);
+    }
+
+    public function cargo_change_status()
+    {
+        $uidcargo = $this->security->xss_clean($this->input->post('cargo_id'));
+        $invoicenumber = $this->security->xss_clean($this->input->post('invoiceno'));
+
+        
+        
+        $datax = array(
+            'updated_at' => date('Y-m-d H:i:s'),
+            'status' => $this->security->xss_clean($this->input->post('status')),
+            'message' => $this->security->xss_clean($this->input->post('comment'))
+        );
+        $status = ['On the way', 'Out for Delivery', 'In Transit', 'Delivered','Pending','Not Delivered'];
+        $change_goods_details = array(
+            'goods_status' => $status[$this->security->xss_clean($this->input->post('status'))]
+        );
+//        echo $uidcargo;
+        
+        $lstid =$this->crud_model->edit_table_account('trip_sheet_cargos', $datax, $uidcargo, 'id');
+        $this->crud_model->edit_table_account('goods_details', $change_goods_details, $invoicenumber, 'invoiceno');
+        $this->session->set_flashdata('msgx', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i> Status Changed successfully.</div>");
+//        	redirect(base_url().'trip_sheet/cargos/'.$uid.'/'.$uidcargo);
+        redirect($_SERVER['HTTP_REFERER']);
+    }
+
+    public function cargos_delete_process()
+    {
+        if ($this->uri->segment(4) == null) {
+            $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Data not found..!</div>");
+            redirect(base_url() . 'trip_sheet/cargos/' . $this->uri->segment(3));
+        } else {
+            $dat = $this->admin_model->delete_table_account('trip_sheet_cargos', $this->uri->segment(4), 'id');
+            $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>Deleted successfully..!.</div>");
+            redirect(base_url() . 'trip_sheet/cargos/' . $this->uri->segment(3));
+        }
+    }
+
+    public function reports()
+    {
+        $this->data['page_id'] = "reports";
+        $this->data['page_title'] = "Reports  | CargoAdmin";
+        $config = array();
+        $searchqry = "";
+        $data_cndtn = array();
+        if (isset($_GET['invoice_number']) && $_GET['invoice_number'] != null) {
+            $searchqry = 'WHERE invoice_number  LIKE "%' . $_GET['invoice_number'] . '%"';
+
+        }
+        if (isset($_GET['cargo_name']) && $_GET['cargo_name'] != null && $_GET['cargo_name'] != 'all') {
+            //$data_cndtn['cargo_id'] = $_GET['cargo_name'];
+            $searchqry .=" AND cargo_name ='".$_GET['cargo_name']."'";
+        }
+        if(isset($_GET['vehicle_number']) && $_GET['vehicle_number']!=null && $_GET['vehicle_number']!='all'){
+        	//$data_cndtn['vehicle_id']=$_GET['vehicle_number'];
+            $searchqry .=" AND vehicle_id='".$_GET['vehicle_number']."'";
+        }
+      
+        $config["base_url"] = base_url() . "trip_sheet/index";
+        //$total_row = $this->admin_model->count_all_data_condition_ordersearch('trip_sheet_cargos', $data_cndtn, 'id', 'DESC', $searchqry);
+        // $config["total_rows"] = $total_row;
+        // $config["per_page"] = 15000;
+        // $config['use_page_numbers'] = TRUE;
+        // $config["suffix"] = '?' . http_build_query($_GET, '', "&");
+        // $config['num_links'] = $total_row;
+        // $config['cur_tag_open'] = '&nbsp;<a style="color: #fff;cursor: default;background-color: #337ab7;border-color: #337ab7;border-radius: 3px;">';
+        // $config['cur_tag_close'] = '</a>';
+        // $config['next_link'] = '<i class="fa fa-arrow-circle-right" aria-hidden="true"></i>';
+        // $config['prev_link'] = '<i class="fa fa-arrow-circle-left" aria-hidden="true"></i>';
+        $this->pagination->initialize($config);
+        $page = 1;
+        //$this->data["result"] = $this->admin_model->get_all_data_condition_ordersearch('trip_sheet_cargos', $data_cndtn, $config["per_page"], $page, 'id', 'DESC', $searchqry);
+        $str_links = $this->pagination->create_links();
+        $this->data["links"] = explode('&nbsp', $str_links);
+        $data_cndtnx = array('status' => 0);
+        //$this->data['cargos'] = $this->admin_model->get_all_data('cargo', $data_cndtnx, 'id', 'DESC');
+        if ($this->uri->segment(4)) {
+            $data_cndtnxx = array('id' => $this->uri->segment(4));
+            $trip_sheet_cargosdtls = $this->admin_model->get_all_data('trip_sheet_cargos', $data_cndtnxx, 'id', 'DESC');
+            if ($trip_sheet_cargosdtls == false) {
+                $this->session->set_flashdata('ermsg', "<div class='alert alert-success'><span data-dismiss='alert' class='close' onclick=\"this.parentElement.style.display='none';\">×</span><i class='fa fa-check-square'></i>data not found..!.</div>");
+                redirect(base_url() . 'trip_sheet/cargos/' . $this->uri->segment(3));
+            } else {
+                $this->data['trip_sheet_cargosdtls'] = $trip_sheet_cargosdtls;
+            }
+        }
+        $data_cndtnx = array('status' => 0);
+        $data_cndtnxy = array('status' => 0);
+        $data['result'] = $this->admin_model->get_reports($searchqry);
+        $data['vehicles'] = $this->admin_model->get_all_data('vehicles', $data_cndtnx, 'id', 'DESC');
+        $data['cargos'] = $this->admin_model->get_all_data('cargo', $data_cndtnxy, 'id', 'DESC');
+        $data_cndtnx = array('status' => 0);
+        $this->data['vehicles'] = $this->admin_model->get_all_data('vehicles', $data_cndtnx, 'id', 'DESC');
+        $this->data['cargos'] = $this->admin_model->get_all_data('cargo', $data_cndtnxy, 'id', 'DESC');
+        //$data["result2"] = $this->admin_model->get_all_data_condition_ordersearch2();
+        $this->load->view('head/header', $this->data);
+        $this->load->view('trip_sheet/reports/index',$data);
+        $this->load->view('head/footer');
+    }
+
+    public function display_details(){
+       
+        $inv=$this->input->post('inv');
+        $det = $this->admin_model->display_details($inv);
+        echo json_encode($det);  
+       
+    }
+
+    public function misreports(){
+        $this->data['page_id'] = "misreports";
+        $this->data['page_title'] = "Mis Reports  | CargoAdmin";
+        $data_cndtnxy = array('status' => 0);
+        $data['shipments'] = $this->admin_model->get_all_data('goods_details', $data_cndtnxy, 'id', 'DESC');
+        $this->load->view('head/header', $this->data);
+        $this->load->view('trip_sheet/misreports',$data);
+        $this->load->view('head/footer');
+    }
+
+
+}//end Class
